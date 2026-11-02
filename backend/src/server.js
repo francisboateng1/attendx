@@ -406,7 +406,19 @@ const metres = distanceMetres(
 const radius = Number(session.allowed_radius_m);
 
 // Approximate combined GPS uncertainty.
-const uncertainty = lecturerAccuracy + studentAccuracy;
+const uncertainty = Math.sqrt(
+    lecturerAccuracy ** 2 +
+    studentAccuracy ** 2
+);
+
+console.log('GPS VERIFICATION:', {
+    distance: metres,
+    lecturerAccuracy,
+    studentAccuracy,
+    allowedRadius: radius,
+    combinedUncertainty: uncertainty
+});
+
 
 // Reject only when the measured distance is clearly outside
 // the permitted radius, even after accounting for uncertainty.
