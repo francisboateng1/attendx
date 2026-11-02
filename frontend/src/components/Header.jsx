@@ -4,9 +4,13 @@ export default function Header({
 }) {
     return (
         <header className="header">
-            <a className="logo" href="/" aria-label="GetAttendX home">
-                GetAttend<span>X</span>
-            </a>
+           <a href="/" className="brand">
+    <img
+        src="/getattendx-logo.png"
+        alt="GetAttendX"
+        className="brand-logo"
+    />
+</a>
             {subtitle && <p>{subtitle}</p>}
             {portal !== 'GetAttendX' && <span>{portal}</span>}
         </header>
