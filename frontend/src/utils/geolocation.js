@@ -1,81 +1,143 @@
-function getPosition(options) {
-    return new Promise((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(
-            resolve,
-            reject,
-            options
-        );
-    });
+function distanceMetres(lat1, lon1, lat2, lon2) {
+    const rad = value => value * Math.PI / 180;
+
+    const dLat = rad(lat2 - lat1);
+    const dLon = rad(lon2 - lon1);
+
+    const a =
+        Math.sin(dLat / 2) ** 2 +
+        Math.cos(rad(lat1)) *
+        Math.cos(rad(lat2)) *
+        Math.sin(dLon / 2) ** 2;
+
+    return 6371000 * 2 * Math.atan2(
+        Math.sqrt(a),
+        Math.sqrt(1 - a)
+    );
 }
 
-function getLocationError(error) {
-    switch (error.code) {
-        case 1:
-            return new Error(
-                'Location permission denied. Allow location access in your browser settings and try again.'
-            );
+function getRepresentativePosition(positions) {
+    // Find the position that is closest to all the other readings.
+    // This is more resistant to an isolated GPS outlier than averaging.
+    let bestPosition = null;
+    let smallestTotalDistance = Infinity;
 
-        case 2:
-            return new Error(
-                'Your device could not determine your location. Check GPS, enable location services and try again.'
-            );
+    for (const candidate of positions) {
+        let totalDistance = 0;
 
-        case 3:
-            return new Error(
-                'Location request timed out. Move somewhere with a clearer GPS signal and try again.'
+        for (const other of positions) {
+            totalDistance += distanceMetres(
+                candidate.coords.latitude,
+                candidate.coords.longitude,
+                other.coords.latitude,
+                other.coords.longitude
             );
+        }
 
-        default:
-            return new Error(
-                'Unable to obtain your location. Check your device location settings.'
-            );
+        if (totalDistance < smallestTotalDistance) {
+            smallestTotalDistance = totalDistance;
+            bestPosition = candidate;
+        }
     }
+
+    return bestPosition;
 }
 
 export async function getCurrentPosition() {
     if (!navigator.geolocation) {
         throw new Error(
-            'This browser does not support location services.'
+            'Your browser does not support location services.'
         );
     }
 
-    try {
-        // First attempt: high-accuracy GPS
-        const position = await getPosition({
-            enableHighAccuracy: true,
-            timeout: 25000,
-            maximumAge: 0
-        });
+    return new Promise((resolve, reject) => {
+        const positions = [];
+        let watchId = null;
+        let finished = false;
 
-        return {
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude,
-            accuracy: position.coords.accuracy
-        };
+        function finish(error = null) {
+            if (finished) return;
 
-    } catch (firstError) {
+            finished = true;
 
-        // Permission denial cannot be fixed by retrying.
-        if (firstError.code === 1) {
-            throw getLocationError(firstError);
-        }
+            if (watchId !== null) {
+                navigator.geolocation.clearWatch(watchId);
+            }
 
-        try {
-            // Second attempt: alternative device/network location.
-            const position = await getPosition({
-                enableHighAccuracy: false,
-                timeout: 20000,
-                maximumAge: 60000
+            clearTimeout(timer);
+
+            if (error) {
+                reject(error);
+                return;
+            }
+
+            const representative =
+                getRepresentativePosition(positions);
+
+            resolve({
+                latitude: representative.coords.latitude,
+                longitude: representative.coords.longitude,
+                accuracy: representative.coords.accuracy
             });
-
-            return {
-                latitude: position.coords.latitude,
-                longitude: position.coords.longitude,
-                accuracy: position.coords.accuracy
-            };
-
-        } catch (secondError) {
-            throw getLocationError(secondError);
         }
-    }
+
+        const timer = setTimeout(() => {
+            if (positions.length >= 3) {
+                finish();
+            } else {
+                finish(new Error(
+                    'Unable to obtain enough reliable GPS readings. Move to an open area and try again.'
+                ));
+            }
+        }, 25000);
+
+        watchId = navigator.geolocation.watchPosition(
+            position => {
+                const accuracy = position.coords.accuracy;
+
+                // Ignore poor-quality readings.
+                if (
+                    !Number.isFinite(accuracy) ||
+                    accuracy > 50
+                ) {
+                    return;
+                }
+
+                // Ignore duplicate timestamps.
+                if (
+                    positions.some(
+                        item => item.timestamp === position.timestamp
+                    )
+                ) {
+                    return;
+                }
+
+                positions.push(position);
+
+                if (positions.length >= 4) {
+                    finish();
+                }
+            },
+
+            error => {
+                let message = 'Unable to obtain your GPS location.';
+
+                if (error.code === 1) {
+                    message = 'Location permission was denied. Please enable location access.';
+                } else if (error.code === 2) {
+                    message = 'Your current location is unavailable. Check your device location settings.';
+                } else if (error.code === 3) {
+                    message = 'GPS acquisition timed out. Move to an open area and try again.';
+                }
+
+                finish(new Error(message));
+            },
+
+            {
+                enableHighAccuracy: true,
+                maximumAge: 0,
+                timeout: 25000
+            }
+        );
+    });
 }

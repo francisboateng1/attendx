@@ -57,16 +57,52 @@ export default function App() {
         setPath(nextPath); setMessage(''); setError('');
     }
 
-    function authenticated(data) {
-        localStorage.setItem(LECTURER_TOKEN_KEY, data.token);
+   function authenticated(data) {
+    localStorage.setItem(LECTURER_TOKEN_KEY, data.token);
+
+    let restoredSession = null;
+
+    try {
+        const saved = JSON.parse(
+            localStorage.getItem(LECTURER_SESSION_KEY) || 'null'
+        );
+
+        if (
+            saved?.lecturerId === data.lecturer.id &&
+            !saved.closedAt &&
+            Date.parse(saved.closesAt) > Date.now()
+        ) {
+            restoredSession = saved;
+        } else {
+            localStorage.removeItem(LECTURER_SESSION_KEY);
+        }
+    } catch {
         localStorage.removeItem(LECTURER_SESSION_KEY);
-        setLecturer(data.lecturer); setSession(null); setRecords([]); setError(''); setMessage('Welcome to your GetAttendX lecturer dashboard.');
     }
 
+    setLecturer(data.lecturer);
+    setSession(restoredSession);
+    setRecords([]);
+    setError('');
+
+    setMessage(
+        restoredSession
+            ? 'Welcome back. Your active attendance session has been restored.'
+            : 'Welcome to your GetAttendX lecturer dashboard.'
+    );
+}
+
     function logout() {
-        localStorage.removeItem(LECTURER_TOKEN_KEY); localStorage.removeItem(LECTURER_SESSION_KEY);
-        setLecturer(null); setSession(null); setRecords([]); setMessage('You have been logged out.');
-    }
+    localStorage.removeItem(LECTURER_TOKEN_KEY);
+
+    // Preserve the active session for the same lecturer.
+    // It will only be restored after that lecturer signs in again.
+
+    setLecturer(null);
+    setSession(null);
+    setRecords([]);
+    setMessage('You have been logged out.');
+}
 
     async function loadRecords(sessionId = session?.sessionId) {
         if (!sessionId) return;

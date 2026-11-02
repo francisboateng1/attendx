@@ -44,55 +44,76 @@ async function execute(sql, values = []) {
   return result;
 }
 
+
+
 async function initializeDatabase() {
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS lecturers (
-      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-      full_name VARCHAR(120) NOT NULL,
-      email VARCHAR(190) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
-      password_hash VARCHAR(180) NOT NULL,
-      created_at VARCHAR(30) NOT NULL,
-      PRIMARY KEY (id),
-      UNIQUE KEY uq_lecturers_email (email)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-  `);
 
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS sessions (
-      id VARCHAR(36) NOT NULL,
-      course_code VARCHAR(40) NOT NULL,
-      course_name VARCHAR(160) NOT NULL,
-      lecturer_name VARCHAR(120) NOT NULL,
-      section_code_hash CHAR(64) NOT NULL,
-      started_at VARCHAR(30) NOT NULL,
-      closes_at VARCHAR(30) NOT NULL,
-      closed_at VARCHAR(30) NULL,
-      lecturer_latitude DOUBLE NULL,
-      lecturer_longitude DOUBLE NULL,
-      allowed_radius_m DOUBLE NOT NULL DEFAULT 50,
-      lecturer_id BIGINT UNSIGNED NULL,
-      PRIMARY KEY (id),
-      KEY idx_sessions_lecturer_active (lecturer_id, closed_at, closes_at),
-      KEY idx_sessions_section_hash (section_code_hash),
-      KEY idx_sessions_started_at (started_at)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-  `);
+    // 1. Create lecturers table
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS lecturers (
+            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            full_name VARCHAR(120) NOT NULL,
+            email VARCHAR(190) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+            password_hash VARCHAR(180) NOT NULL,
+            created_at VARCHAR(30) NOT NULL,
+            PRIMARY KEY (id),
+            UNIQUE KEY uq_lecturers_email (email)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
 
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS attendance (
-      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-      session_id VARCHAR(36) NOT NULL,
-      student_name VARCHAR(120) NOT NULL,
-      index_number VARCHAR(80) NOT NULL,
-      checked_in_at VARCHAR(30) NOT NULL,
-      method ENUM('STUDENT','LECTURER') NOT NULL,
-      device_key_hash CHAR(64) NULL,
-      PRIMARY KEY (id),
-      UNIQUE KEY uq_attendance_session_index (session_id, index_number),
-      UNIQUE KEY uq_attendance_session_device (session_id, device_key_hash),
-      KEY idx_attendance_session_time (session_id, checked_in_at)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-  `);
+    // 2. Create sessions table
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS sessions (
+            id VARCHAR(36) NOT NULL,
+            course_code VARCHAR(40) NOT NULL,
+            course_name VARCHAR(160) NOT NULL,
+            lecturer_name VARCHAR(120) NOT NULL,
+            section_code_hash CHAR(64) NOT NULL,
+            started_at VARCHAR(30) NOT NULL,
+            closes_at VARCHAR(30) NOT NULL,
+            closed_at VARCHAR(30) NULL,
+            lecturer_latitude DOUBLE NULL,
+            lecturer_longitude DOUBLE NULL,
+            lecturer_accuracy DOUBLE NULL,
+            allowed_radius_m DOUBLE NOT NULL DEFAULT 50,
+            lecturer_id BIGINT UNSIGNED NULL,
+            PRIMARY KEY (id),
+            KEY idx_sessions_lecturer_active (lecturer_id, closed_at, closes_at),
+            KEY idx_sessions_section_hash (section_code_hash),
+            KEY idx_sessions_started_at (started_at)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+
+    // 3. Check whether the lecturer_accuracy column exists.
+    // This supports databases created with the older schema.
+  const [accuracyColumns] = await pool.query(`
+    SHOW COLUMNS FROM sessions LIKE 'lecturer_accuracy'
+`);
+
+if (accuracyColumns.length === 0) {
+    await pool.query(`
+        ALTER TABLE sessions
+        ADD COLUMN lecturer_accuracy DOUBLE NULL
+        AFTER lecturer_longitude
+    `);
+}
+
+    // 4. Create attendance table
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS attendance (
+            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            session_id VARCHAR(36) NOT NULL,
+            student_name VARCHAR(120) NOT NULL,
+            index_number VARCHAR(80) NOT NULL,
+            checked_in_at VARCHAR(30) NOT NULL,
+            method ENUM('STUDENT','LECTURER') NOT NULL,
+            device_key_hash CHAR(64) NULL,
+            PRIMARY KEY (id),
+            UNIQUE KEY uq_attendance_session_index (session_id, index_number),
+            UNIQUE KEY uq_attendance_session_device (session_id, device_key_hash),
+            KEY idx_attendance_session_time (session_id, checked_in_at)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
 }
 
 const app = express();
@@ -214,9 +235,9 @@ app.post('/api/lecturer/register', async (req, res, next) => {
     const password = String(req.body.password || '');
     if (fullName.length < 3 || fullName.length > 120) return res.status(400).json({ error: 'Enter your full name (3–120 characters).' });
    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 190) {
-  return res.status(400).json({
-    error: 'Enter a valid email address.'
-  });
+    return res.status(400).json({
+        error: 'Enter a valid email address.'
+    });
 }
     if (password.length < 10 || password.length > 200) return res.status(400).json({ error: 'Your password must contain at least 10 characters.' });
     const salt = crypto.randomBytes(16).toString('hex');
@@ -258,7 +279,20 @@ app.post('/api/sessions', requireLecturer, async (req, res, next) => {
     const { latitude, longitude } = req.body;
     if (!courseCode || !courseName || !lecturerName) return res.status(400).json({ error: 'Course code, course name and lecturer name are required.' });
     if (!validCoordinates(latitude, longitude)) return res.status(400).json({ error: 'A valid lecturer GPS location is required to start attendance.' });
-    if (!Number.isFinite(Number(req.body.locationAccuracy)) || Number(req.body.locationAccuracy) > 250) return res.status(400).json({ error: `GPS accuracy is currently ${Math.round(Number(req.body.locationAccuracy) || 0)} metres. Wait for a better GPS reading or move near a window/open area (maximum accepted uncertainty: 250 metres).` });
+  
+    
+    const lecturerAccuracy = Number(req.body.locationAccuracy);
+
+if (
+    !Number.isFinite(lecturerAccuracy) ||
+    lecturerAccuracy <= 0 ||
+    lecturerAccuracy > 50
+) {
+    return res.status(400).json({
+        error: 'Your GPS accuracy is too low. Move to an open area and try again.'
+    });
+}
+
     await closeExpired();
     const active = await queryOne('SELECT id FROM sessions WHERE lecturer_id=? AND closed_at IS NULL AND closes_at>? LIMIT 1', [req.lecturer.id, now()]);
     if (active) return res.status(409).json({ error: 'An attendance session is already active. Close it before starting another.' });
@@ -269,10 +303,37 @@ app.post('/api/sessions', requireLecturer, async (req, res, next) => {
     const sessionId = crypto.randomUUID();
     const startedAt = now();
     const closesAt = new Date(Date.now() + durationMinutes * 60_000).toISOString();
-    await execute(`INSERT INTO sessions
-      (id,course_code,course_name,lecturer_name,section_code_hash,started_at,closes_at,closed_at,lecturer_latitude,lecturer_longitude,allowed_radius_m,lecturer_id)
-      VALUES(?,?,?,?,?,?,?,NULL,?,?,?,?)`,
-    [sessionId, courseCode, courseName, lecturerName, hash(sectionCode), startedAt, closesAt, Number(latitude), Number(longitude), radius, req.lecturer.id]);
+   await execute(`INSERT INTO sessions
+  (
+    id,
+    course_code,
+    course_name,
+    lecturer_name,
+    section_code_hash,
+    started_at,
+    closes_at,
+    closed_at,
+    lecturer_latitude,
+    lecturer_longitude,
+    lecturer_accuracy,
+    allowed_radius_m,
+    lecturer_id
+  )
+  VALUES(?,?,?,?,?,?,?,NULL,?,?,?,?,?)`,
+[
+    sessionId,
+    courseCode,
+    courseName,
+    lecturerName,
+    hash(sectionCode),
+    startedAt,
+    closesAt,
+    Number(latitude),
+    Number(longitude),
+    lecturerAccuracy,
+    radius,
+    req.lecturer.id
+]);
     res.status(201).json({ sessionId, courseCode, courseName, lecturerName, lecturerId: req.lecturer.id, sectionCode, startedAt, closesAt, allowedRadiusM: radius });
   } catch (error) { next(error); }
 });
@@ -311,9 +372,57 @@ app.post('/api/student/check-in', requireStudent, async (req, res, next) => {
     const { latitude, longitude, accuracy } = req.body.location || {};
     if (!studentName || studentName.length > 120 || !deviceKey) return res.status(400).json({ error: 'Enter your full name. A device identifier is also required.' });
     if (!validCoordinates(latitude, longitude)) return res.status(400).json({ error: 'Your current location could not be verified. Enable location permission and try again.' });
-    if (!Number.isFinite(Number(accuracy)) || Number(accuracy) > 100) return res.status(400).json({ error: 'Your GPS accuracy is too low. Move to an open area and try again.' });
-    const metres = distanceMetres(Number(session.lecturer_latitude), Number(session.lecturer_longitude), Number(latitude), Number(longitude));
-    if (metres > Number(session.allowed_radius_m)) return res.status(403).json({ error: `You are approximately ${Math.round(metres)} metres from the lecturer. You must be within ${Math.round(Number(session.allowed_radius_m))} metres to check in.` });
+
+
+  const lecturerAccuracy = Number(session.lecturer_accuracy);
+const studentAccuracy = Number(accuracy);
+if (
+    !Number.isFinite(studentAccuracy) ||
+    studentAccuracy <= 0 ||
+    studentAccuracy > 50
+) {
+    return res.status(400).json({
+        error: 'Your GPS accuracy is too low. Move to an open area and try again.'
+    });
+}
+
+
+if (
+    !Number.isFinite(lecturerAccuracy) ||
+    lecturerAccuracy <= 0 ||
+    lecturerAccuracy > 50
+) {
+    return res.status(400).json({
+        error: 'Your GPS accuracy is too low. Move to an open area and try again.'
+    });
+}
+const metres = distanceMetres(
+    Number(session.lecturer_latitude),
+    Number(session.lecturer_longitude),
+    Number(latitude),
+    Number(longitude)
+);
+
+const radius = Number(session.allowed_radius_m);
+
+// Approximate combined GPS uncertainty.
+const uncertainty = lecturerAccuracy + studentAccuracy;
+
+// Reject only when the measured distance is clearly outside
+// the permitted radius, even after accounting for uncertainty.
+if (metres - uncertainty > radius) {
+    return res.status(403).json({
+        error: `Your location appears to be approximately ${Math.round(metres)} metres from the lecturer, outside the permitted ${Math.round(radius)}-metre radius.`
+    });
+}
+
+// If the uncertainty overlaps the boundary, request better readings.
+// Do not automatically accept or reject this check-in.
+if (metres + uncertainty > radius) {
+    return res.status(409).json({
+        error: 'Your GPS location is too uncertain to verify your distance. Move to an open area and try again.'
+    });
+}
     const deviceHash = hash(deviceKey);
     const checkedInAt = now();
     try {
