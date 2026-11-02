@@ -16,9 +16,13 @@ function distanceMetres(lat1, lon1, lat2, lon2) {
     );
 }
 
+const MAX_ACCEPTABLE_ACCURACY = 50;
+const MIN_READINGS = 3;
+const TARGET_READINGS = 5;
+const MAX_WAIT_TIME = 45000;
+const MIN_COLLECTION_TIME = 12000;
+
 function getRepresentativePosition(positions) {
-    // Find the position that is closest to all the other readings.
-    // This is more resistant to an isolated GPS outlier than averaging.
     let bestPosition = null;
     let smallestTotalDistance = Infinity;
 
@@ -43,6 +47,17 @@ function getRepresentativePosition(positions) {
     return bestPosition;
 }
 
+function getMedian(values) {
+    const sorted = [...values].sort((a, b) => a - b);
+    const middle = Math.floor(sorted.length / 2);
+
+    if (sorted.length % 2 === 0) {
+        return (sorted[middle - 1] + sorted[middle]) / 2;
+    }
+
+    return sorted[middle];
+}
+
 export async function getCurrentPosition() {
     if (!navigator.geolocation) {
         throw new Error(
@@ -52,91 +67,190 @@ export async function getCurrentPosition() {
 
     return new Promise((resolve, reject) => {
         const positions = [];
+        const timestamps = new Set();
+
         let watchId = null;
         let finished = false;
+        let lastBrowserError = null;
+        let rejectedReadings = 0;
+
+        const startedAt = Date.now();
+
+        function cleanup() {
+            if (watchId !== null) {
+                navigator.geolocation.clearWatch(watchId);
+            }
+
+            clearTimeout(overallTimer);
+            clearTimeout(collectionTimer);
+        }
 
         function finish(error = null) {
             if (finished) return;
 
             finished = true;
-
-            if (watchId !== null) {
-                navigator.geolocation.clearWatch(watchId);
-            }
-
-            clearTimeout(timer);
+            cleanup();
 
             if (error) {
                 reject(error);
                 return;
             }
 
+            if (positions.length < MIN_READINGS) {
+                reject(new Error(
+                    'Not enough reliable GPS readings. Move to an open area and try again.'
+                ));
+                return;
+            }
+
             const representative =
                 getRepresentativePosition(positions);
+
+            if (!representative) {
+                reject(new Error(
+                    'Unable to determine a reliable GPS position. Please try again.'
+                ));
+                return;
+            }
+
+            // Account conservatively for the spread between readings.
+            const distancesFromRepresentative = positions.map(position =>
+                distanceMetres(
+                    representative.coords.latitude,
+                    representative.coords.longitude,
+                    position.coords.latitude,
+                    position.coords.longitude
+                )
+            );
+
+            const positionSpread =
+                getMedian(distancesFromRepresentative);
+
+            const reportedAccuracy =
+                representative.coords.accuracy;
+
+            const effectiveAccuracy = Math.max(
+                reportedAccuracy,
+                positionSpread
+            );
+
+            if (effectiveAccuracy > MAX_ACCEPTABLE_ACCURACY) {
+                reject(new Error(
+                    `GPS accuracy is approximately ${Math.round(effectiveAccuracy)} metres. ` +
+                    'A reading of 50 metres or better is required. Move to an open area and try again.'
+                ));
+                return;
+            }
 
             resolve({
                 latitude: representative.coords.latitude,
                 longitude: representative.coords.longitude,
-                accuracy: representative.coords.accuracy
+                accuracy: effectiveAccuracy
             });
         }
 
-        const timer = setTimeout(() => {
-            if (positions.length >= 3) {
-                finish();
-            } else {
+        function handleBrowserError(error) {
+            lastBrowserError = error;
+
+            // Permission denial is not a temporary GPS problem.
+            if (error.code === 1) {
                 finish(new Error(
-                    'Unable to obtain enough reliable GPS readings. Move to an open area and try again.'
+                    'Location permission was denied. Enable location access for this website in your browser settings.'
                 ));
             }
-        }, 25000);
+
+            // TIMEOUT and POSITION_UNAVAILABLE can be temporary.
+            // Keep watching instead of immediately abandoning acquisition.
+        }
+
+        function getFinalError() {
+            if (rejectedReadings > 0 && positions.length === 0) {
+                return new Error(
+                    'Your GPS readings are currently less accurate than 50 metres. ' +
+                    'Move outdoors, enable precise location and try again.'
+                );
+            }
+
+            if (lastBrowserError?.code === 2) {
+                return new Error(
+                    'Your current location is unavailable. Check your device location settings and try again.'
+                );
+            }
+
+            if (lastBrowserError?.code === 3) {
+                return new Error(
+                    'GPS acquisition timed out. Move to an open area and try again.'
+                );
+            }
+
+            return new Error(
+                'Unable to obtain enough reliable GPS readings. Check your location settings and try again.'
+            );
+        }
+
+        const collectionTimer = setTimeout(() => {
+            if (positions.length >= MIN_READINGS) {
+                finish();
+            }
+        }, MIN_COLLECTION_TIME);
+
+        const overallTimer = setTimeout(() => {
+            if (positions.length >= MIN_READINGS) {
+                finish();
+            } else {
+                finish(getFinalError());
+            }
+        }, MAX_WAIT_TIME);
 
         watchId = navigator.geolocation.watchPosition(
             position => {
-                const accuracy = position.coords.accuracy;
+                if (finished) return;
 
-                // Ignore poor-quality readings.
+                const accuracy = position.coords.accuracy;
+                const timestamp = position.timestamp;
+
+                // Ignore invalid or stale readings.
                 if (
                     !Number.isFinite(accuracy) ||
-                    accuracy > 50
+                    accuracy <= 0 ||
+                    !Number.isFinite(timestamp) ||
+                    Date.now() - timestamp > 15000
                 ) {
                     return;
                 }
 
-                // Ignore duplicate timestamps.
-                if (
-                    positions.some(
-                        item => item.timestamp === position.timestamp
-                    )
-                ) {
+                // Ignore duplicate readings.
+                if (timestamps.has(timestamp)) {
+                    return;
+                }
+
+                timestamps.add(timestamp);
+
+                // Keep the existing backend's 50m accuracy requirement.
+                if (accuracy > MAX_ACCEPTABLE_ACCURACY) {
+                    rejectedReadings++;
                     return;
                 }
 
                 positions.push(position);
 
-                if (positions.length >= 4) {
+                const elapsed = Date.now() - startedAt;
+
+                // Collect several readings instead of trusting one reading.
+                if (
+                    positions.length >= TARGET_READINGS &&
+                    elapsed >= MIN_COLLECTION_TIME
+                ) {
                     finish();
                 }
             },
 
-            error => {
-                let message = 'Unable to obtain your GPS location.';
-
-                if (error.code === 1) {
-                    message = 'Location permission was denied. Please enable location access.';
-                } else if (error.code === 2) {
-                    message = 'Your current location is unavailable. Check your device location settings.';
-                } else if (error.code === 3) {
-                    message = 'GPS acquisition timed out. Move to an open area and try again.';
-                }
-
-                finish(new Error(message));
-            },
+            handleBrowserError,
 
             {
                 enableHighAccuracy: true,
                 maximumAge: 0,
-                timeout: 25000
+                timeout: MAX_WAIT_TIME
             }
         );
     });
