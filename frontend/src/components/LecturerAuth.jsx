@@ -28,7 +28,7 @@ export default function LecturerAuth({ onAuthenticated }) {
             <label>Password<input required type="password" minLength={isRegister ? 10 : 1} autoComplete={isRegister ? 'new-password' : 'current-password'} value={form.password} onChange={e => setForm(v => ({ ...v, password: e.target.value }))} placeholder={isRegister ? 'At least 10 characters' : 'Enter your password'} /></label>
             <button className="button-primary form-submit" disabled={busy}>{busy ? 'Please wait…' : isRegister ? 'Create Lecturer Account' : 'Log In to Dashboard'}</button>
         </form>
-        <p className="auth-switch">{isRegister ? 'Already have an account?' : 'New to AttendX?'} <button type="button" onClick={() => { setMode(isRegister ? 'login' : 'register'); setError(''); }}> {isRegister ? 'Log in' : 'Create an account'}</button></p>
+        <p className="auth-switch">{isRegister ? 'Already have an account?' : 'New to GetAttendX?'} <button type="button" onClick={() => { setMode(isRegister ? 'login' : 'register'); setError(''); }}> {isRegister ? 'Log in' : 'Create an account'}</button></p>
         <p className="auth-security-note">Passwords are securely hashed before storage. Your lecturer account protects your attendance sessions and registers.</p>
     </section>;
 }

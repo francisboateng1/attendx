@@ -17,6 +17,6 @@ export default function HomeView() {
                 <span className="portal-link">Open Student Portal <b>→</b></span>
             </a>
         </div>
-        <footer className="home-footer">AttendX · Verified Presence. Accountable Attendance.</footer>
+        <footer className="home-footer">GetAttendX · Verified Presence. Accountable Attendance.</footer>
     </>;
 }

@@ -1,29 +1,10 @@
 import { useState } from 'react';
 import AttendanceTable from './AttendanceTable';
 import { downloadSessionExport } from '../services/api';
-
+import { getCurrentPosition } from '../utils/geolocation';
 const INITIAL_FORM = { courseCode: 'CE 279', courseName: 'Programming with Java', durationMinutes: 20, allowedRadiusM: 50 };
 
-function getCurrentPosition() {
-    return new Promise((resolve, reject) => {
-        if (!navigator.geolocation) return reject(new Error('This browser does not support GPS location.'));
-        let best = null; let watchId; let finished = false;
-        const finish = () => {
-            if (finished) return; finished = true;
-            if (watchId != null) navigator.geolocation.clearWatch(watchId);
-            if (!best) return reject(new Error('Could not obtain your location. Check that Windows Location Services and browser location permission are enabled.'));
-            if (best.coords.accuracy > 250) return reject(new Error(`Your best GPS reading is accurate to about ${Math.round(best.coords.accuracy)} metres. Windows/browser location is too imprecise for a reliable lecture reference. Enable Windows Location Services, move near an outside window and try again.`));
-            resolve({ latitude: best.coords.latitude, longitude: best.coords.longitude, locationAccuracy: best.coords.accuracy });
-        };
-        watchId = navigator.geolocation.watchPosition(position => {
-            if (!best || position.coords.accuracy < best.coords.accuracy) best = position;
-            if (best.coords.accuracy <= 60) finish();
-        }, error => {
-            if (error.code === 1) { if (!finished) { finished = true; if (watchId != null) navigator.geolocation.clearWatch(watchId); reject(new Error('Location permission is required. Allow location access for this browser and try again.')); } }
-        }, { enableHighAccuracy: true, timeout: 25000, maximumAge: 10000 });
-        window.setTimeout(finish, 12000);
-    });
-}
+
 
 export default function LecturerDashboard({ session, records, onStart, onManualSubmit, manual, onManualChange, onRefresh, onClose, loading, message, error, lecturer }) {
     const [form, setForm] = useState(INITIAL_FORM);
@@ -35,7 +16,21 @@ export default function LecturerDashboard({ session, records, onStart, onManualS
         event.preventDefault(); setStartError(''); setStarting(true);
         try {
             const location = await getCurrentPosition();
-            await onStart({ ...form, durationMinutes: Number(form.durationMinutes), allowedRadiusM: Number(form.allowedRadiusM), ...location });
+
+if (location.accuracy > 250) {
+    throw new Error(
+        `Your location accuracy is approximately ${Math.round(location.accuracy)} metres. Please move to a location with a stronger GPS signal and try again.`
+    );
+}
+
+await onStart({
+    ...form,
+    durationMinutes: Number(form.durationMinutes),
+    allowedRadiusM: Number(form.allowedRadiusM),
+    latitude: location.latitude,
+    longitude: location.longitude,
+    locationAccuracy: location.accuracy
+});
         } catch (e) { setStartError(e.message); }
         finally { setStarting(false); }
     }

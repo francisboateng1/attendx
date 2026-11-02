@@ -18,7 +18,7 @@ export async function downloadSessionExport(sessionId) {
     if (!response.ok) { const data = await response.json().catch(() => ({})); throw new Error(data.error || 'Could not download the attendance register.'); }
     const blob = await response.blob();
     const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a'); anchor.href = url; anchor.download = `AttendX_Attendance_${sessionId}.xlsx`;
+    const anchor = document.createElement('a'); anchor.href = url;anchor.download = `GetAttendX_Attendance_${sessionId}.xlsx`;
     document.body.appendChild(anchor); anchor.click(); anchor.remove(); URL.revokeObjectURL(url);
 }
 

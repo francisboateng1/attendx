@@ -1,21 +1,12 @@
 import { useEffect, useState } from 'react';
 import { apiRequest } from '../services/api';
 import { getDeviceKey } from '../utils/device';
+import { getCurrentPosition } from '../utils/geolocation';
 
 const TOKEN_KEY = 'attendxStudentToken';
 const EXPIRY_KEY = 'attendxStudentExpiry';
 const AUTH_KEY = 'attendxStudentContext';
 
-function getCurrentPosition() {
-    return new Promise((resolve, reject) => {
-        if (!navigator.geolocation) return reject(new Error('This browser does not support GPS location.'));
-        navigator.geolocation.getCurrentPosition(
-            position => resolve({ latitude: position.coords.latitude, longitude: position.coords.longitude, accuracy: position.coords.accuracy }),
-            error => reject(new Error(error.code === 1 ? 'Location permission is required to check in.' : 'Could not verify your location. Enable GPS and try again.')),
-            { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
-        );
-    });
-}
 
 export default function StudentCheckIn() {
     const [credentials, setCredentials] = useState({ indexNumber: '', sectionCode: '' });
@@ -93,7 +84,7 @@ export default function StudentCheckIn() {
     const seconds = String(remaining % 60).padStart(2, '0');
 
     return <div className="student-shell">
-        <div className="student-brand"><span className="student-brand-mark">A</span><div><strong>AttendX</strong><small>STUDENT PORTAL</small></div></div>
+        <div className="student-brand"><span className="student-brand-mark">A</span><div><strong>GetAttendX</strong><small>STUDENT PORTAL</small></div></div>
         {!loggedIn ? <section className="student-card">
             <span className="eyebrow">STUDENT ACCESS</span><h1>Log in to your lecture</h1><p className="muted">Use the index number and active section code provided by your lecturer.</p>
             {error && <div className="notice notice-error">{error}</div>}
@@ -111,8 +102,8 @@ export default function StudentCheckIn() {
                 <div className="location-required"><span className="location-dot"/><div><strong>Location verification required</strong><p>Allow GPS access when prompted. You must be within the lecturer's permitted distance.</p></div></div>
                 <form onSubmit={checkIn} className="student-form"><label>Your full name<input required maxLength="120" autoComplete="name" value={studentName} onChange={e => setStudentName(e.target.value)} placeholder="Enter your full name" /></label><button className="button-primary full-width" disabled={busy}>{busy ? 'Verifying location & checking in…' : 'Check In'}</button></form>
             </>}
-            <div className="fixed-login-note">You cannot log out manually. AttendX will automatically end this login when the 10-minute timer expires.</div>
+            <div className="fixed-login-note">You cannot log out manually. GetAttendX will automatically end this login when the 10-minute timer expires.</div>
         </section>}
-        <footer className="student-footer"><a href="/">AttendX home</a><span>Verified Presence. Accountable Attendance.</span></footer>
+        <footer className="student-footer"><a href="/">GetAttendX home</a><span>Verified Presence. Accountable Attendance.</span></footer>
     </div>;
 }

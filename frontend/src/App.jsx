@@ -60,7 +60,7 @@ export default function App() {
     function authenticated(data) {
         localStorage.setItem(LECTURER_TOKEN_KEY, data.token);
         localStorage.removeItem(LECTURER_SESSION_KEY);
-        setLecturer(data.lecturer); setSession(null); setRecords([]); setError(''); setMessage('Welcome to your AttendX lecturer dashboard.');
+        setLecturer(data.lecturer); setSession(null); setRecords([]); setError(''); setMessage('Welcome to your GetAttendX lecturer dashboard.');
     }
 
     function logout() {
