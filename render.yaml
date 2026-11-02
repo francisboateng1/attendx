@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: attendx-api
+    runtime: node
+    plan: starter
+    region: frankfurt
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/health
+    disk:
+      name: attendx-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: DB_FILE
+        value: /var/data/attendx.sqlite
+      - key: ATTENDX_TOKEN_SECRET
+        generateValue: true
+      - key: FRONTEND_ORIGIN
+        sync: false
