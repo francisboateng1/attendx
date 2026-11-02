@@ -7,3 +7,28 @@ dist/
 *.sqlite-shm
 *.sqlite-wal
 .DS_Store
+
+# Environment variables
+.env
+.env.*
+**/.env
+**/.env.*
+
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+build/
+
+# Logs
+*.log
+
+# Local databases
+*.db
+*.sqlite
+*.sqlite3
+
+# OS files
+.DS_Store
+Thumbs.db

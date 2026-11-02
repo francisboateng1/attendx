@@ -2,19 +2,25 @@ services:
   - type: web
     name: attendx-api
     runtime: node
-    plan: starter
+    plan: free
     region: frankfurt
     rootDir: backend
     buildCommand: npm install
     startCommand: npm start
     healthCheckPath: /api/health
-    disk:
-      name: attendx-data
-      mountPath: /var/data
-      sizeGB: 1
     envVars:
-      - key: DB_FILE
-        value: /var/data/attendx.sqlite
+      - key: TIDB_HOST
+        sync: false
+      - key: TIDB_PORT
+        value: "4000"
+      - key: TIDB_USER
+        sync: false
+      - key: TIDB_PASSWORD
+        sync: false
+      - key: TIDB_DATABASE
+        value: attendx
+      - key: TIDB_ENABLE_SSL
+        value: "true"
       - key: ATTENDX_TOKEN_SECRET
         generateValue: true
       - key: FRONTEND_ORIGIN
