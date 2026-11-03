@@ -282,7 +282,7 @@ export default function LecturerDashboard({
                         className="button-quiet"
                         onClick={onBackFromHistory}
                     >
-                        ← Back to attendance history
+                        ← Start New Attendance Session
                     </button>
 
                     <button
