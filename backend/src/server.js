@@ -269,6 +269,38 @@ app.post('/api/lecturer/login', async (req, res, next) => {
 });
 app.get('/api/lecturer/me', requireLecturer, (req, res) => res.json({ lecturer: req.lecturer }));
 
+app.get('/api/lecturer/sessions', requireLecturer, async (req, res, next) => {
+    try {
+
+        await closeExpired();
+        const sessions = await queryRows(`
+            SELECT
+                s.id AS sessionId,
+                s.course_code AS courseCode,
+                s.course_name AS courseName,
+                s.lecturer_name AS lecturerName,
+                s.started_at AS startedAt,
+                s.closes_at AS closesAt,
+                s.closed_at AS closedAt,
+                s.allowed_radius_m AS allowedRadiusM,
+                (
+                    SELECT COUNT(*)
+                    FROM attendance a
+                    WHERE a.session_id = s.id
+                ) AS attendanceCount
+            FROM sessions s
+            WHERE s.lecturer_id = ?
+            ORDER BY s.started_at DESC
+            LIMIT 100
+        `, [req.lecturer.id]);
+
+        res.json(sessions);
+    } catch (error) {
+        next(error);
+    }
+});
+
+
 app.post('/api/sessions', requireLecturer, async (req, res, next) => {
   try {
     const courseCode = clean(req.body.courseCode);
