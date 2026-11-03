@@ -275,7 +275,7 @@ app.post('/api/sessions', requireLecturer, async (req, res, next) => {
     const courseName = clean(req.body.courseName);
     const lecturerName = req.lecturer.fullName;
     const durationMinutes = Math.min(240, Math.max(1, Number(req.body.durationMinutes) || 20));
-    const radius = Math.min(200, Math.max(10, Number(req.body.allowedRadiusM) || 50));
+    const radius = Math.min(200, Math.max(10, Number(req.body.allowedRadiusM) || 100));
     const { latitude, longitude } = req.body;
     if (!courseCode || !courseName || !lecturerName) return res.status(400).json({ error: 'Course code, course name and lecturer name are required.' });
     if (!validCoordinates(latitude, longitude)) return res.status(400).json({ error: 'A valid lecturer GPS location is required to start attendance.' });
@@ -379,7 +379,7 @@ const studentAccuracy = Number(accuracy);
 if (
     !Number.isFinite(studentAccuracy) ||
     studentAccuracy <= 0 ||
-    studentAccuracy > 50
+    studentAccuracy > 100
 ) {
     return res.status(400).json({
         error: 'Your GPS accuracy is too low. Move to an open area and try again.'
