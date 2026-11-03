@@ -318,7 +318,7 @@ app.post('/api/sessions', requireLecturer, async (req, res, next) => {
 if (
     !Number.isFinite(lecturerAccuracy) ||
     lecturerAccuracy <= 0 ||
-    lecturerAccuracy > 50
+    lecturerAccuracy > 80
 ) {
     return res.status(400).json({
         error: 'Your GPS accuracy is too low. Move to an open area and try again.'
@@ -422,7 +422,7 @@ if (
 if (
     !Number.isFinite(lecturerAccuracy) ||
     lecturerAccuracy <= 0 ||
-    lecturerAccuracy > 50
+    lecturerAccuracy > 80
 ) {
     return res.status(400).json({
         error: 'Your GPS accuracy is too low. Move to an open area and try again.'
