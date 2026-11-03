@@ -54,12 +54,13 @@ export default function LecturerDashboard({
         try {
             const location = await getCurrentPosition();
 
-            // Match the lecturer GPS accuracy requirement.
-            if (location.accuracy > 50) {
-                throw new Error(
-                    `Your location accuracy is approximately ${Math.round(location.accuracy)} metres. Please move to a location with a stronger GPS signal and try again.`
-                );
-            }
+          if (location.accuracy > 300) {
+    throw new Error(
+        `Your GPS accuracy is approximately ${Math.round(location.accuracy)} metres. ` +
+        'Your location is not within the acceptable GPS accuracy range of 300 metres. ' +
+        'Please move to an area with a better GPS signal and try again.'
+    );
+}
 
             await onStart({
                 ...form,

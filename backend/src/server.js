@@ -318,7 +318,7 @@ app.post('/api/sessions', requireLecturer, async (req, res, next) => {
 if (
     !Number.isFinite(lecturerAccuracy) ||
     lecturerAccuracy <= 0 ||
-    lecturerAccuracy > 150
+    lecturerAccuracy > 300
 ) {
     return res.status(400).json({
         error: 'Your GPS accuracy is too low. Move to an open area and try again.'
@@ -406,67 +406,45 @@ app.post('/api/student/check-in', requireStudent, async (req, res, next) => {
     if (!validCoordinates(latitude, longitude)) return res.status(400).json({ error: 'Your current location could not be verified. Enable location permission and try again.' });
 
 
-  const lecturerAccuracy = Number(session.lecturer_accuracy);
+ const lecturerAccuracy = Number(session.lecturer_accuracy);
 const studentAccuracy = Number(accuracy);
+
 if (
     !Number.isFinite(studentAccuracy) ||
     studentAccuracy <= 0 ||
-    studentAccuracy > 200
+    studentAccuracy > 300
 ) {
     return res.status(400).json({
-        error: 'Your GPS accuracy is too low. Move to an open area and try again.'
+        error: 'Your GPS accuracy is outside the acceptable range of 300 metres. Move to an open area and try again.'
     });
 }
-
 
 if (
     !Number.isFinite(lecturerAccuracy) ||
     lecturerAccuracy <= 0 ||
-    lecturerAccuracy > 150
+    lecturerAccuracy > 300
 ) {
     return res.status(400).json({
-        error: 'Your GPS accuracy is too low. Move to an open area and try again.'
+        error: 'The lecturer location has GPS accuracy outside the acceptable range of 300 metres. The lecturer needs to obtain a new location reading.'
     });
 }
+
 const metres = distanceMetres(
-    Number(session.lecturer_latitude),
-    Number(session.lecturer_longitude),
-    Number(latitude),
-    Number(longitude)
+  Number(session.lecturer_latitude),
+  Number(session.lecturer_longitude),
+  Number(latitude),
+  Number(longitude)
 );
 
 const radius = Number(session.allowed_radius_m);
 
-// Approximate combined GPS uncertainty.
-const uncertainty = Math.sqrt(
-    lecturerAccuracy ** 2 +
-    studentAccuracy ** 2
-);
-
-console.log('GPS VERIFICATION:', {
-    distance: metres,
-    lecturerAccuracy,
-    studentAccuracy,
-    allowedRadius: radius,
-    combinedUncertainty: uncertainty
-});
-
-
-// Reject only when the measured distance is clearly outside
-// the permitted radius, even after accounting for uncertainty.
-if (metres - uncertainty > radius) {
-    return res.status(403).json({
-        error: `Your location appears to be approximately ${Math.round(metres)} metres from the lecturer, outside the permitted ${Math.round(radius)}-metre radius.`
-    });
+// Accept attendance based on the calculated distance.
+if (metres > radius) {
+  return res.status(403).json({
+    error: `You are approximately ${Math.round(metres)} metres from the lecturer. The permitted attendance radius is ${Math.round(radius)} metres.`
+  });
 }
 
-// If the uncertainty overlaps the boundary, request better readings.
-// Do not automatically accept or reject this check-in.
-if (metres + uncertainty > radius) {
-    return res.status(409).json({
-        error: 'Your GPS location is too uncertain to verify your distance. Move to an open area and try again.'
-    });
-}
     const deviceHash = hash(deviceKey);
     const checkedInAt = now();
     try {

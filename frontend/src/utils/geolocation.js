@@ -16,7 +16,7 @@ function distanceMetres(lat1, lon1, lat2, lon2) {
     );
 }
 
-const MAX_ACCEPTABLE_ACCURACY = 50;
+const MAX_ACCEPTABLE_ACCURACY = 300;
 const MIN_READINGS = 3;
 const TARGET_READINGS = 5;
 const MAX_WAIT_TIME = 45000;
@@ -134,14 +134,14 @@ export async function getCurrentPosition() {
                 positionSpread
             );
 
-            if (effectiveAccuracy > MAX_ACCEPTABLE_ACCURACY) {
-                reject(new Error(
-                    `GPS accuracy is approximately ${Math.round(effectiveAccuracy)} metres. ` +
-                    'A reading of 50 metres or better is required. Move to an open area and try again.'
-                ));
-                return;
-            }
-
+           if (effectiveAccuracy > MAX_ACCEPTABLE_ACCURACY) {
+    reject(new Error(
+        `Your GPS accuracy is approximately ${Math.round(effectiveAccuracy)} metres. ` +
+        'Your location is not within the acceptable GPS accuracy range of 300 metres. ' +
+        'Move to an open area and try again.'
+    ));
+    return;
+}
             resolve({
                 latitude: representative.coords.latitude,
                 longitude: representative.coords.longitude,
@@ -164,13 +164,12 @@ export async function getCurrentPosition() {
         }
 
         function getFinalError() {
-            if (rejectedReadings > 0 && positions.length === 0) {
-                return new Error(
-                    'Your GPS readings are currently less accurate than 50 metres. ' +
-                    'Move outdoors, enable precise location and try again.'
-                );
-            }
-
+           if (rejectedReadings > 0 && positions.length === 0) {
+    return new Error(
+        'Your GPS readings are currently less accurate than 300 metres. ' +
+        'Move outdoors, enable precise location and try again.'
+    );
+}
             if (lastBrowserError?.code === 2) {
                 return new Error(
                     'Your current location is unavailable. Check your device location settings and try again.'
